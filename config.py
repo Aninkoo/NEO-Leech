@@ -158,7 +158,7 @@ DEBRID_LINK_API = ""
 REAL_DEBRID_API = ""
 
 # Web UI / qBittorrent / Aria2c
-BASE_URL = http://pwo00wo4okogc00c48048sw0.107.172.142.4.sslip.io  # public URL of this bot's web frontend
+BASE_URL = "http://pwo00wo4okogc00c48048sw0.107.172.142.4.sslip.io"  # public URL of this bot's web frontend
 BASE_URL_PORT = 880
 WEB_PINCODE = False
 TORRENT_TIMEOUT = 0

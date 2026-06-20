@@ -5,7 +5,12 @@
 # UPSTREAM_REPO, UPSTREAM_BRANCH, AUTO_UPDATE and UPDATE_PKGS may also be set via env vars.
 
 
-
+# REQUIRED
+BOT_TOKEN = "8382344628:AAENHXjJBsefSFN1n_Tt8p6jbkIqV234Yg0"
+TELEGRAM_API = 25926556
+TELEGRAM_HASH = "244f6eab1f38c7a0b7f0cb546c2fca12"
+OWNER_ID = 6421755358
+DATABASE_URL = "mongodb+srv://engraninko:anananan@cluster0.itjaj97.mongodb.net/?retryWrites=true&w=majority"
 
 # General
 DEFAULT_LANG = "en"

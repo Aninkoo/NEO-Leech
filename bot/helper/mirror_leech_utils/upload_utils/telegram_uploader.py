@@ -4,7 +4,7 @@
 from asyncio import sleep
 from logging import getLogger
 from os import path as ospath, walk, makedirs
-from re import match as re_match, sub as re_sub
+from re import match as re_match
 from time import time
 
 from aioshutil import rmtree
@@ -19,7 +19,7 @@ from bot.core.config_manager import Config
 from bot.helper.ext_utils.bot_utils import sync_to_async
 from bot.helper.ext_utils.files_utils import check_strict_file_mode, get_base_name, is_archive
 from bot.helper.ext_utils.status_utils import get_readable_file_size, get_readable_time
-from bot.helper.telegram_helper.message_utils import send_message, delete_message
+from bot.helper.telegram_helper.message_utils import delete_message
 
 LOGGER = getLogger(__name__)
 
@@ -51,11 +51,6 @@ class TelegramUploader:
         self._sent_msg = None
         self._log_msg = None
         self._error = ""
-        self._auto_thumb_enabled = (
-            not self._listener.thumb and
-            self._listener.user_dict.get("AUTO_THUMBNAIL", False)
-        )
-        self._auto_thumb_path = None
         self._status_message = None
 
     def _check_cancelled(self):
@@ -66,8 +61,6 @@ class TelegramUploader:
         settings_map = {
             "LEECH_PREFIX": ("_lprefix", ""),
             "LEECH_SUFFIX": ("_lsuffix", ""),
-            "LEECH_CAPTION": ("_lcaption", ""),
-            "LEECH_FONT": ("_lfont", ""),
         }
 
         for key, (attr, default) in settings_map.items():
@@ -103,12 +96,12 @@ class TelegramUploader:
             self._log_msg = self._status_message
             return True
         except Exception as e:
-            await self._cleanup_auto_thumb()
+            LOGGER.error(f"Failed to send status message: {e}")
             await self._listener.on_upload_error(str(e))
             return False
 
     async def _prepare_file(self, pre_file_, dirpath):
-        """Prepare filename with prefix/suffix"""
+        """Prepare filename with proper length handling"""
         cap_file_ = file_ = pre_file_
 
         # Handle long filenames
@@ -136,7 +129,7 @@ class TelegramUploader:
         return cap_file_
 
     async def _store_file(self, file_, f_path, f_size):
-        """Store file to /data/shared with progress updates"""
+        """Store file to /data/shared using synchronous copy with progress updates"""
         # Apply prefix/suffix
         if self._lprefix:
             file_ = self._lprefix + file_
@@ -151,59 +144,36 @@ class TelegramUploader:
         if not ospath.exists(dest_dir):
             await sync_to_async(makedirs, dest_dir, exist_ok=True)
         
-        # Copy file with progress simulation
-        chunk_size = 1024 * 1024  # 1MB chunks
-        processed = 0
-        
-        # Use aiofiles for async copy
-        async with await aiopath.exists(f_path) as _:
-            pass
-        
-        try:
-            import aiofiles
-            async with aiofiles.open(f_path, 'rb') as fsrc:
-                async with aiofiles.open(dest_path, 'wb') as fdst:
-                    while True:
-                        self._check_cancelled()
-                        chunk = await fsrc.read(chunk_size)
-                        if not chunk:
-                            break
-                        await fdst.write(chunk)
-                        processed += len(chunk)
-                        
-                        # Simulate progress
-                        self._last_uploaded = processed
-                        self._processed_bytes += len(chunk)
-                        
-                        # Update progress message periodically
-                        if self._status_message and (time() - getattr(self, '_last_progress_update', 0) >= 1.0):
-                            self._last_progress_update = time()
-                            try:
-                                elapsed = time() - self._start_time
-                                speed = self._processed_bytes / elapsed if elapsed > 0 else 0
-                                progress_text = (
-                                    f"📤 **Storing files to VPS...**\n\n"
-                                    f"**Current:** {file_}\n"
-                                    f"**Progress:** {get_readable_file_size(processed)} / {get_readable_file_size(f_size)}\n"
-                                    f"**Speed:** {get_readable_file_size(speed)}/s\n"
-                                    f"**Files stored:** {self._total_files}\n"
-                                    f"**Elapsed:** {get_readable_time(elapsed)}"
-                                )
-                                await self._status_message.edit_text(progress_text)
-                            except Exception as e:
-                                LOGGER.debug(f"Progress update failed: {e}")
-        except Exception as e:
-            # If async copy fails, try sync copy
-            LOGGER.warning(f"Async copy failed: {e}, trying sync copy")
-            await sync_to_async(self._sync_copy, f_path, dest_path, f_size)
+        # Use synchronous copy in a thread pool to avoid blocking
+        await sync_to_async(self._sync_copy, f_path, dest_path)
         
         LOGGER.info(f"Stored: {file_} -> {dest_path}")
         return dest_path
 
-    def _sync_copy(self, src, dst, total_size):
-        """Fallback synchronous copy"""
+    def _sync_copy(self, src, dst):
+        """Synchronous copy using shutil"""
         import shutil
         shutil.copy2(src, dst)
+
+    async def _update_progress(self, file_, f_size):
+        """Update progress message"""
+        if self._status_message and (time() - getattr(self, '_last_progress_update', 0) >= 1.0):
+            self._last_progress_update = time()
+            try:
+                elapsed = time() - self._start_time
+                speed = self._processed_bytes / elapsed if elapsed > 0 else 0
+                progress_text = (
+                    f"📤 **Storing files to VPS...**\n\n"
+                    f"**Current:** {file_}\n"
+                    f"**Size:** {get_readable_file_size(f_size)}\n"
+                    f"**Speed:** {get_readable_file_size(speed)}/s\n"
+                    f"**Files stored:** {self._total_files}\n"
+                    f"**Total processed:** {get_readable_file_size(self._processed_bytes)}\n"
+                    f"**Elapsed:** {get_readable_time(elapsed)}"
+                )
+                await self._status_message.edit_text(progress_text)
+            except Exception as e:
+                LOGGER.debug(f"Progress update failed: {e}")
 
     async def upload(self):
         """Main upload method - stores files locally instead of Telegram"""
@@ -259,10 +229,15 @@ class TelegramUploader:
                     cap_mono = await self._prepare_file(file_, dirpath)
                     
                     self._last_uploaded = 0
-                    self._processed_bytes = 0  # Reset for each file
                     
                     # Store file locally
                     dest_path = await self._store_file(file_, f_path, f_size)
+                    
+                    # Update processed bytes
+                    self._processed_bytes += f_size
+                    
+                    # Update progress
+                    await self._update_progress(file_, f_size)
                     
                     LOGGER.info(f"Successfully stored: {file_}")
                     
@@ -291,7 +266,6 @@ class TelegramUploader:
             return
         
         if self._total_files == 0:
-            await self._cleanup_auto_thumb()
             await self._listener.on_upload_error(
                 "No files to store. This may be because Strict Mode is enabled or "
                 "because all files match the Excluded Extensions."
@@ -299,7 +273,6 @@ class TelegramUploader:
             return
         
         if self._total_files <= self._corrupted:
-            await self._cleanup_auto_thumb()
             await self._listener.on_upload_error(
                 f"Files Corrupted or unable to store. {self._error or 'Check logs!'}"
             )
@@ -323,17 +296,14 @@ class TelegramUploader:
             except Exception:
                 pass
         
-        await self._cleanup_auto_thumb()
         await self._listener.on_upload_complete(
             None, self._msgs_dict, self._total_files, self._corrupted
         )
         return
 
-    async def _cleanup_auto_thumb(self):
-        if self._auto_thumb_path:
-            from bot.helper.thumbnail_utils import ThumbnailFetcher
-            await ThumbnailFetcher.cleanup_thumbnail(self._auto_thumb_path)
-            self._auto_thumb_path = None
+    async def cancel_task(self):
+        self._listener.is_cancelled = True
+        await self._listener.on_upload_error("your storage operation has been stopped!")
 
     @property
     def speed(self):
@@ -345,8 +315,3 @@ class TelegramUploader:
     @property
     def processed_bytes(self):
         return self._processed_bytes
-
-    async def cancel_task(self):
-        self._listener.is_cancelled = True
-        await self._cleanup_auto_thumb()
-        await self._listener.on_upload_error("your storage operation has been stopped!")

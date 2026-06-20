@@ -27,7 +27,7 @@ LOGIN_PASS = ""
 
 # Status & defaults
 STATUS_LIMIT = 10
-STATUS_UPDATE_INTERVAL = 15
+STATUS_UPDATE_INTERVAL = 5
 DEFAULT_UPLOAD = "rc"  # "rc" | "gd" | "ddl"
 INCOMPLETE_TASK_NOTIFIER = False
 EXCLUDED_EXTENSIONS = ""
@@ -85,7 +85,7 @@ LEECH_NAME_SWAP = ""
 
 # Leech
 LEECH_SPLIT_SIZE = 0  # bytes; 0 = Telegram default
-AS_DOCUMENT = False
+AS_DOCUMENT = True
 EQUAL_SPLITS = False
 MEDIA_GROUP = False
 LEECH_PREFIX = ""
@@ -158,7 +158,7 @@ DEBRID_LINK_API = ""
 REAL_DEBRID_API = ""
 
 # Web UI / qBittorrent / Aria2c
-BASE_URL = ""  # public URL of this bot's web frontend
+BASE_URL = http://pwo00wo4okogc00c48048sw0.107.172.142.4.sslip.io  # public URL of this bot's web frontend
 BASE_URL_PORT = 880
 WEB_PINCODE = False
 TORRENT_TIMEOUT = 0

@@ -4,12 +4,15 @@
 # BOT_TOKEN, TELEGRAM_API, TELEGRAM_HASH, OWNER_ID, DATABASE_URL, BASE_URL,
 # UPSTREAM_REPO, UPSTREAM_BRANCH, AUTO_UPDATE and UPDATE_PKGS may also be set via env vars.
 
-# REQUIRED
-BOT_TOKEN = ""
-OWNER_ID = 0
-TELEGRAM_API = 0
-TELEGRAM_HASH = ""
-DATABASE_URL = ""  # mongodb:// or mongodb+srv:// URI
+import os
+
+# REQUIRED - Load from environment variables
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID = int(os.environ.get("OWNER_ID", 0))
+TELEGRAM_API = int(os.environ.get("TELEGRAM_API", 0))
+TELEGRAM_HASH = os.environ.get("TELEGRAM_HASH")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
 
 # General
 DEFAULT_LANG = "en"
